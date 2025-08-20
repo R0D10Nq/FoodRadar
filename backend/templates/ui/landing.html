@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+{% load static %}
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FoodRadar — доставка рядом с вами</title>
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <style>
+    :root{
+      --bg:#0f172a;          /* slate-900 */
+      --panel:#0b1220;       /* deep panel */
+      --panel-2:#111827;     /* panel */
+      --border:#334155;      /* slate-700 */
+      --text:#e2e8f0;        /* slate-200 */
+      --muted:#94a3b8;       /* slate-400 */
+      --primary:#38bdf8;     /* sky-400 */
+      --primary-700:#0369a1; /* sky-700 */
+      --primary-800:#075985; /* sky-800 */
+      --ok:#22c55e;          /* green-500 */
+      --err:#f87171;         /* red-400 */
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: radial-gradient(1200px 600px at 60% -10%, #0b1220 10%, transparent 60%), var(--bg); color: var(--text); }
+    header { display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--border); background: rgba(15,23,42,0.8); backdrop-filter: blur(8px); position: sticky; top:0; z-index: 20; }
+    .logo { font-weight:700; letter-spacing:0.3px; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid var(--primary); background: linear-gradient(180deg, var(--primary-800), var(--primary-700)); color:white; text-decoration:none; }
+    .btn:hover { filter: brightness(1.06); }
+    main { max-width: 1024px; margin: 0 auto; padding: 28px 20px 40px; }
+    .hero { display:grid; grid-template-columns:1fr; gap:20px; align-items:center; }
+    .title { font-size: clamp(28px, 4vw, 40px); line-height:1.1; margin:10px 0 8px; }
+    .subtitle { color: var(--muted); font-size: 15px; }
+    .cta { margin-top: 18px; display:flex; gap:10px; align-items:center; }
+    .panel { background: linear-gradient(180deg, rgba(17,24,39,0.9), rgba(11,18,32,0.9)); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .list { display:grid; grid-template-columns:1fr; gap: 12px; margin-top: 20px; }
+    .li { display:flex; gap:10px; align-items:flex-start; color: var(--muted); }
+    .bullet { width:8px; height:8px; background: var(--primary); border-radius:999px; margin-top:7px; }
+    footer { text-align:center; color: var(--muted); font-size:12px; padding: 26px 0 18px; }
+    @media (min-width: 900px) {
+      .hero { grid-template-columns: 1.2fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">FoodRadar</div>
+    <a class="btn" href="/app/">Открыть приложение</a>
+  </header>
+  <main>
+    <section class="hero">
+      <div>
+        <div class="title">Доставка из ближайших ресторанов — быстро и просто</div>
+        <div class="subtitle">Ищем заведения рядом, собираем заказ и показываем курьера в реальном времени. Оплата — через Stripe.</div>
+        <div class="cta">
+          <a class="btn" href="/app/">Попробовать демо</a>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="subtitle">Что можно сделать:</div>
+        <div class="list">
+          <div class="li"><div class="bullet"></div><div>Зарегистрироваться и войти</div></div>
+          <div class="li"><div class="bullet"></div><div>Найти рестораны поблизости</div></div>
+          <div class="li"><div class="bullet"></div><div>Собрать корзину и оформить заказ</div></div>
+          <div class="li"><div class="bullet"></div><div>Оплатить тестовой картой Stripe</div></div>
+          <div class="li"><div class="bullet"></div><div>Следить за заказом через WebSocket</div></div>
+        </div>
+      </div>
+    </section>
+    <footer>
+      © FoodRadar — демо. Это прототип, не коммерческий сервис.
+    </footer>
+  </main>
+</body>
+</html>

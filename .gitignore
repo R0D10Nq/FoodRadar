@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django
+/staticfiles/
+/media/
+.env
+.env.*
+db.sqlite3
+*/db.sqlite3
+
+# Virtualenv
+.venv/
+venv/
+
+# VSCode / IDE
+.vscode/
+.idea/
+*.iml
+
+# Pytest
+.pytest_cache/
+.coverage*
+htmlcov/
+
+# Byte-compiled
+*.pyo
+
+# Миграции коммитим — важны для воспроизводимости
+
+# Docker
+*.log
+*.pid
+
+# Node (если фронт подтянем)
+node_modules/

@@ -1,0 +1,19 @@
+# Конфиг форматтера и сортировки импортов
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+include = "\.pyi?$"
+extend-exclude = [
+  "^.*/migrations/.*$",
+  "^.*/staticfiles/.*$",
+]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+src_paths = [".", "apps", "foodradar"]
+known_first_party = ["apps", "foodradar"]
+skip_glob = [
+  "*/migrations/*",
+  "staticfiles/*",
+]

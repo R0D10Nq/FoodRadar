@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="ru">
+{% load static %}
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FoodRadar — демо UI</title>
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { background: #111827; padding: 16px 20px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 18px; }
+    main { display: grid; grid-template-columns: 1fr; gap: 20px; padding: 20px; max-width: 1200px; margin: 0 auto; width: 100%; }
+    section { background: #111827; border: 1px solid #374151; border-radius: 10px; padding: 16px; }
+    section h2 { margin: 0 0 12px; font-size: 16px; color: #93c5fd; }
+    label { display: block; font-size: 12px; color: #9ca3af; margin-top: 8px; }
+    input, select, button { margin-top: 6px; padding: 8px 10px; border-radius: 8px; border: 1px solid #374151; background: #0b1220; color: #e2e8f0; }
+    input, select { width: 100%; }
+    button { cursor: pointer; border-color: #3b82f6; background: #1e3a8a; }
+    button.secondary { border-color: #64748b; background: #0b1325; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .muted { color: #94a3b8; font-size: 12px; }
+    .ok { color: #22c55e; }
+    .err { color: #f87171; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 8px 0; border-bottom: 1px dashed #334155; }
+    .dish { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .badge { background: #0b1325; border: 1px solid #334155; border-radius: 999px; padding: 2px 8px; font-size: 11px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .card { border: 1px dashed #334155; padding: 12px; border-radius: 8px; }
+    .hidden { display: none; }
+    .ws { height: 160px; overflow: auto; background: #0b1220; border: 1px solid #334155; padding: 8px; border-radius: 8px; }
+    /* Состояния и тосты */
+    button[disabled] { opacity: 0.6; cursor: progress; }
+    .toast { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: flex; flex-direction: column; gap: 8px; }
+    .toast .msg { background: #0b1220; color: #e2e8f0; border: 1px solid #334155; padding: 10px 12px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+    .toast .msg.ok { border-color: #22c55e; }
+    .toast .msg.err { border-color: #f87171; }
+    /* Корзина */
+    .cart-list { display: grid; gap: 8px; }
+    .cart-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .cart-right { display: flex; gap: 6px; align-items: center; }
+    .qty { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #334155; border-radius: 8px; padding: 2px 6px; background: #0b1220; }
+    .qty button { padding: 4px 8px; }
+    .total { text-align: right; margin-top: 6px; }
+    @media (min-width: 900px) { main { grid-template-columns: 340px 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>FoodRadar — доставка еды рядом с вами</h1>
+      <div class="muted">Заказывайте из ближайших ресторанов: регистрация, корзина, оплата Stripe и лайв‑трек заказа.</div>
+    </div>
+    <div id="user-bar" class="row">
+      <span id="user-email" class="muted"></span>
+      <button id="btn-logout" class="secondary hidden">Выйти</button>
+    </div>
+  </header>
+  <main>
+    <div>
+      <section>
+        <h2>1) Аутентификация</h2>
+        <form id="auth-form" onsubmit="event.preventDefault(); login();">
+          <label>Email
+            <input id="email" type="email" placeholder="user@example.com" required />
+          </label>
+          <label>Телефон (необязательно)
+            <input id="phone" type="text" placeholder="+1.." />
+          </label>
+          <label>Пароль
+            <input id="password" type="password" placeholder="min 6 символов" required minlength="6" />
+          </label>
+          <div class="row">
+            <button id="btn-register" type="button">Зарегистрироваться</button>
+            <button id="btn-login" class="secondary" type="submit">Войти (JWT)</button>
+          </div>
+          <div class="muted mono" id="auth-status">Неавторизован</div>
+        </form>
+      </section>
+
+      <section>
+        <h2>2) Поиск ресторанов</h2>
+        <form id="search-form" onsubmit="event.preventDefault(); findRestaurants();">
+          <div class="grid2">
+            <label>Широта
+              <input id="lat" type="number" step="0.0001" min="-90" max="90" required value="55.7558" />
+            </label>
+            <label>Долгота
+              <input id="lon" type="number" step="0.0001" min="-180" max="180" required value="37.6176" />
+            </label>
+          </div>
+          <label>Радиус (км)
+            <input id="radius" type="number" step="0.1" min="0.1" value="5" />
+          </label>
+          <div class="row">
+            <button id="btn-find" type="submit">Найти рестораны</button>
+            <button id="btn-geoloc" class="secondary" type="button">Моё местоположение</button>
+          </div>
+        </form>
+        <div id="restaurants"></div>
+      </section>
+
+      <section>
+        <h2>3) Корзина</h2>
+        <div id="cart-list" class="muted">Пусто</div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btn-clear" class="secondary">Очистить</button>
+          <button id="btn-create-order">Создать заказ</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>4) Оплата Stripe</h2>
+        <div id="stripe-disabled" class="muted"></div>
+        <div id="stripe-card" class="card hidden"></div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btn-pay" class="hidden">Оплатить</button>
+        </div>
+        <div id="pay-status" class="muted"></div>
+      </section>
+
+      <section>
+        <h2>5) Трекинг заказа (WebSocket)</h2>
+        <div class="row">
+          <button id="btn-ws-connect" class="secondary">Подключиться</button>
+          <button id="btn-ws-disconnect" class="secondary">Отключиться</button>
+        </div>
+        <div class="ws mono" id="ws-log"></div>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <h2>Меню ресторана</h2>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:1">Исключить аллергены (через запятую)
+            <input id="exclude_allergens" type="text" placeholder="peanut,gluten" />
+          </label>
+          <button id="btn-apply-filter" class="secondary" type="button">Применить фильтр</button>
+          <button id="btn-reset-filter" class="secondary" type="button">Сбросить</button>
+        </div>
+        <div id="menu"></div>
+      </section>
+      <section>
+        <h2>История заказов</h2>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:1">Фильтр по статусу
+            <select id="orders-filter">
+              <option value="">Все</option>
+              <option value="created">created</option>
+              <option value="pending_payment">pending_payment</option>
+              <option value="paid">paid</option>
+              <option value="restaurant_confirmed">restaurant_confirmed</option>
+              <option value="ready_for_pickup">ready_for_pickup</option>
+              <option value="accepted">accepted</option>
+              <option value="in_transit">in_transit</option>
+              <option value="delivered">delivered</option>
+              <option value="canceled">canceled</option>
+            </select>
+          </label>
+          <button id="btn-orders" class="secondary" type="button">Обновить список</button>
+        </div>
+        <div id="orders-list" class="muted">Нет данных</div>
+      </section>
+      <section>
+        <h2>Статус заказа</h2>
+        <div id="order" class="muted">Заказ не создан</div>
+      </section>
+      <section>
+        <h2>API debug</h2>
+        <div class="mono" id="debug"></div>
+      </section>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // Конфиг из Django
+    window.UI_CONFIG = {
+      apiBase: "{{ api_base }}",
+      stripePk: "{{ stripe_pk }}"
+    };
+
+    const el = (id) => document.getElementById(id);
+    const state = {
+      access: null,
+      refresh: null,
+      meEmail: null,
+      restaurants: [],
+      currentRestaurant: null,
+      menu: null,
+      cart: [],
+      order: null,
+      orders: [],
+      stripe: null,
+      card: null,
+      ws: null,
+    };
+
+    // Локальное хранилище (безопасность минимальная — прототип)
+    const LS = {
+      get(k, d=null) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } },
+      set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} },
+      del(k) { try { localStorage.removeItem(k); } catch (_) {} },
+    };
+
+    function logDebug(obj) {
+      el('debug').textContent = JSON.stringify(obj, null, 2);
+    }
+
+    function setAuthStatus(text, ok=false) {
+      el('auth-status').innerHTML = ok ? `<span class="ok">${text}</span>` : text;
+    }
+
+    // Нормализуем числа: запятая -> точка, тримминг
+    function normNumber(s) {
+      return String(s ?? '').replace(',', '.').trim();
+    }
+
+    // Тосты и лоадеры
+    function toast(msg, type='info') {
+      const box = el('toast');
+      const node = document.createElement('div');
+      node.className = `msg ${type==='ok'?'ok':type==='err'?'err':''}`;
+      node.textContent = msg;
+      box.appendChild(node);
+      setTimeout(() => { node.remove(); }, 3200);
+    }
+
+    function setLoading(btnId, isLoading, label='Загрузка...') {
+      const b = el(btnId); if (!b) return;
+      if (isLoading) { b.dataset.label = b.textContent; b.textContent = label; b.disabled = true; }
+      else { if (b.dataset.label) b.textContent = b.dataset.label; b.disabled = false; }
+    }
+
+    function updateUserBar() {
+      el('user-email').textContent = state.meEmail ? `\u2705 ${state.meEmail}` : '';
+      el('btn-logout').classList.toggle('hidden', !state.meEmail);
+    }
+
+    async function api(path, {method='GET', body=null, auth=true}={}) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (auth && state.access) headers['Authorization'] = `Bearer ${state.access}`;
+      const res = await fetch(`${UI_CONFIG.apiBase}${path}`, { method, headers, body: body ? JSON.stringify(body) : null });
+      const isJson = (res.headers.get('content-type')||'').includes('application/json');
+      const data = isJson ? await res.json() : await res.text();
+      if (!res.ok) throw { status: res.status, data };
+      return data;
+    }
+
+    function renderRestaurants() {
+      if (!state.restaurants.length) { el('restaurants').innerHTML = '<div class="muted">Ничего не найдено</div>'; return; }
+      const items = state.restaurants.map(r => `
+        <li>
+          <div><b>${r.name}</b> <span class="badge">#${r.id}</span></div>
+          <div class="muted">${(r.address || '').replace(/\n/g, ' ')} ${r.distance_km != null ? ` • ${r.distance_km} км` : ''}</div>
+          <div style="margin-top:6px"><button onclick="loadMenu(${r.id})">Открыть меню</button></div>
+        </li>`).join('');
+      el('restaurants').innerHTML = `<ul>${items}</ul>`;
+    }
+
+    function renderMenu() {
+      if (!state.menu) { el('menu').innerHTML = '<div class="muted">Выберите ресторан</div>'; return; }
+      const items = state.menu.dishes.map(d => `
+        <li class="dish">
+          <div>
+            <div><b>${d.name}</b> <span class="badge">$${Number(d.price).toFixed(2)}</span></div>
+            <div class="muted">${(d.allergens||[]).join(', ')}</div>
+          </div>
+          <div class="row">
+            <input type="number" min="1" value="1" style="width:72px" id="qty_${d.id}" />
+            <button onclick="addToCart(${d.id})">Добавить</button>
+          </div>
+        </li>
+      `).join('');
+      el('menu').innerHTML = `<div style="margin-bottom:8px" class="muted">${state.menu.name}</div><ul>${items}</ul>`;
+    }
+
+    function renderCart() {
+      if (!state.cart.length) { el('cart-list').textContent = 'Пусто'; updateButtons(); return; }
+      const rows = state.cart.map(it => {
+        const line = (Number(it.price||0) * Number(it.qty||0));
+        return `
+          <div class="cart-item">
+            <div>
+              <div><b>${it.name || ('Блюдо #' + it.dish_id)}</b> <span class="badge">$${Number(it.price||0).toFixed(2)}</span></div>
+              <div class="muted">ID #${it.dish_id}</div>
+            </div>
+            <div class="cart-right">
+              <div class="qty">
+                <button onclick="decQty(${it.dish_id})">−</button>
+                <div>${it.qty}</div>
+                <button onclick="incQty(${it.dish_id})">+</button>
+              </div>
+              <div>$${line.toFixed(2)}</div>
+              <button class="secondary" onclick="removeItem(${it.dish_id})">Убрать</button>
+            </div>
+          </div>`;
+      }).join('');
+      const total = state.cart.reduce((s, it) => s + Number(it.price||0) * Number(it.qty||0), 0);
+      el('cart-list').innerHTML = `<div class="cart-list">${rows}</div><div class="total"><b>Итого: $${total.toFixed(2)}</b></div>`;
+      updateButtons();
+    }
+
+    function renderOrder() {
+      if (!state.order) { el('order').textContent = 'Заказ не создан'; return; }
+      const o = state.order;
+      const items = (o.items||[]).map(i => `#${i.dish} ${i.dish_name} x ${i.qty} = $${Number(i.price_each).toFixed(2)}`).join('<br/>');
+      el('order').innerHTML = `
+        <div>ID: <b>${o.id}</b> <button class="secondary" style="margin-left:6px" onclick="navigator.clipboard.writeText(String(${o.id})).then(()=>toast('ID заказа скопирован', 'ok')).catch(()=>toast('Не удалось скопировать ID', 'err'))">Скопировать ID</button> | Статус: <b>${o.status}</b> | Итого: <b>$${Number(o.total||0).toFixed(2)}</b></div>
+        <div class="muted">Ресторан #${o.restaurant}, Клиент #${o.client}${o.courier ? `, Курьер #${o.courier}` : ''}</div>
+        <div style="margin-top:6px" class="mono">${items}</div>
+      `;
+    }
+
+    function renderOrders() {
+      const box = el('orders-list');
+      if (!state.orders || !state.orders.length) { box.textContent = 'Нет заказов'; return; }
+      const rows = state.orders.map(o => {
+        const canCancel = (o.status === 'created' || o.status === 'pending_payment');
+        return `
+          <li class="dish">
+            <div>
+              <div>Заказ <b>#${o.id}</b> <span class="badge">${o.status}</span></div>
+              <div class="muted">Итого: $${Number(o.total||0).toFixed(2)} • ${new Date(o.created_at).toLocaleString()}</div>
+            </div>
+            <div class="row">
+              <button class="secondary" onclick="openOrder(${o.id})">Открыть</button>
+              ${canCancel ? `<button onclick=\"cancelOrder(${o.id})\">Отменить</button>` : ''}
+            </div>
+          </li>`;
+      }).join('');
+      box.innerHTML = `<ul>${rows}</ul>`;
+    }
+
+    async function fetchOrders() {
+      if (!state.access) { toast('Нужно войти, чтобы видеть историю заказов', 'err'); return; }
+      const btn = el('btn-orders');
+      try {
+        setLoading('btn-orders', true, 'Загружаем...');
+        const sel = el('orders-filter');
+        const status = sel && sel.value ? `?status=${encodeURIComponent(sel.value)}` : '';
+        const data = await api(`/orders/mine${status}`);
+        state.orders = data.results || [];
+        renderOrders();
+      } catch (e) {
+        el('orders-list').innerHTML = `<div class=\"err\">Ошибка: ${JSON.stringify(e.data||e)}</div>`;
+        toast('Не удалось загрузить заказы', 'err');
+      } finally { setLoading('btn-orders', false); }
+    }
+
+    async function openOrder(id) {
+      try {
+        const data = await api(`/orders/${id}`);
+        state.order = data; renderOrder();
+      } catch (e) {
+        toast('Не удалось открыть заказ', 'err');
+      }
+    }
+
+    async function cancelOrder(id) {
+      if (!confirm('Отменить заказ?')) return;
+      try {
+        const data = await api(`/orders/${id}/status`, { method: 'PATCH', body: { status: 'canceled' } });
+        // Обновим запись в списке
+        const idx = state.orders.findIndex(o => o.id === id);
+        if (idx >= 0) state.orders[idx] = data;
+        if (state.order && state.order.id === id) state.order = data;
+        renderOrders(); renderOrder();
+        toast('Заказ отменен', 'ok');
+      } catch (e) {
+        toast(`Не удалось отменить: ${JSON.stringify(e.data||e)}`, 'err');
+      }
+    }
+
+    async function register() {
+      try {
+        setLoading('btn-register', true);
+        const email = el('email').value.trim();
+        const phone = el('phone').value.trim();
+        const password = el('password').value;
+        const data = await api('/auth/register', { method: 'POST', auth: false, body: { email, phone, password } });
+        setAuthStatus(`Зарегистрирован: ${data.email} (id=${data.id})`, true);
+        toast('Регистрация успешна', 'ok');
+      } catch (e) {
+        setAuthStatus(`Ошибка регистрации: ${JSON.stringify(e.data||e)}`);
+        toast('Ошибка регистрации', 'err');
+      } finally { setLoading('btn-register', false); }
+    }
+
+    async function login() {
+      try {
+        setLoading('btn-login', true);
+        const email = el('email').value.trim();
+        const password = el('password').value;
+        const data = await api('/auth/token', { method: 'POST', auth: false, body: { email, password } });
+        state.access = data.access; state.refresh = data.refresh; state.meEmail = email;
+        LS.set('fr_access', state.access); LS.set('fr_refresh', state.refresh); LS.set('fr_email', email);
+        setAuthStatus(`Вошли как ${email}`, true); updateUserBar(); toast('Вход выполнен', 'ok');
+      } catch (e) {
+        setAuthStatus(`Ошибка входа: ${JSON.stringify(e.data||e)}`);
+        toast('Ошибка входа', 'err');
+      } finally { setLoading('btn-login', false); }
+    }
+
+    async function findRestaurants() {
+      try {
+        setLoading('btn-find', true);
+        const latStr = normNumber(el('lat').value);
+        const lonStr = normNumber(el('lon').value);
+        const radiusStr = normNumber(el('radius').value);
+
+        const latNum = parseFloat(latStr);
+        const lonNum = parseFloat(lonStr);
+        const radiusNum = parseFloat(radiusStr);
+        const latIn = el('lat'); const lonIn = el('lon'); const radIn = el('radius');
+        // Сброс подсветки ошибок
+        if (latIn) latIn.style.borderColor = '#374151';
+        if (lonIn) lonIn.style.borderColor = '#374151';
+        if (radIn) radIn.style.borderColor = '#374151';
+
+        let bad = false;
+        if (!Number.isFinite(latNum) || latNum < -90 || latNum > 90) { bad = true; if (latIn) latIn.style.borderColor = '#f87171'; }
+        if (!Number.isFinite(lonNum) || lonNum < -180 || lonNum > 180) { bad = true; if (lonIn) lonIn.style.borderColor = '#f87171'; }
+        if (!Number.isFinite(radiusNum) || radiusNum <= 0) { bad = true; if (radIn) radIn.style.borderColor = '#f87171'; }
+        if (bad) { toast('Некорректные координаты: широта −90..90, долгота −180..180, радиус > 0', 'err'); return; }
+
+        LS.set('fr_coords', { lat: latStr, lon: lonStr, radius: radiusStr });
+        const data = await api(`/restaurants?lat=${encodeURIComponent(latStr)}&lon=${encodeURIComponent(lonStr)}&radius=${encodeURIComponent(radiusStr)}`, { auth: false });
+        state.restaurants = data.results || []; renderRestaurants();
+      } catch (e) {
+        el('restaurants').innerHTML = `<div class="err">Ошибка: ${JSON.stringify(e.data||e)}</div>`;
+        toast('Не удалось загрузить рестораны', 'err');
+      } finally { setLoading('btn-find', false); }
+    }
+
+    // Геолокация браузера: автозаполнение координат
+    function geoloc() {
+      if (!navigator.geolocation) { toast('Геолокация не поддерживается', 'err'); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          el('lat').value = pos.coords.latitude.toFixed(4);
+          el('lon').value = pos.coords.longitude.toFixed(4);
+          LS.set('fr_coords', { lat: el('lat').value, lon: el('lon').value, radius: el('radius').value });
+          toast('Координаты обновлены', 'ok');
+        },
+        () => toast('Не удалось получить геолокацию', 'err')
+      );
+    }
+
+    async function loadMenu(restId) {
+      try {
+        if (state.currentRestaurant && state.currentRestaurant !== restId && state.cart.length) {
+          if (!confirm('Сменить ресторан? Текущая корзина будет очищена.')) { return; }
+          clearCart();
+        }
+        el('menu').innerHTML = '<div class="muted">Загружаем меню...</div>';
+        const ex = (el('exclude_allergens')?.value || '').trim();
+        LS.set('fr_ex_allergens', ex);
+        const qs = ex ? `?exclude_allergens=${encodeURIComponent(ex)}` : '';
+        const data = await api(`/restaurants/${restId}/menu${qs}`, { auth: false });
+        state.currentRestaurant = restId; state.menu = data; renderMenu();
+        LS.set('fr_rest_id', restId);
+        // Восстановить корзину для этого ресторана, если есть
+        const saved = LS.get('fr_cart');
+        if (saved && saved.restaurant_id === restId && Array.isArray(saved.items)) { state.cart = saved.items; }
+        else { state.cart = []; }
+        renderCart();
+      } catch (e) { el('menu').innerHTML = `<div class="err">Ошибка: ${JSON.stringify(e.data||e)}</div>`; }
+    }
+
+    function addToCart(dishId) {
+      if (!state.menu) return;
+      const q = Math.max(1, parseInt(document.getElementById(`qty_${dishId}`).value || '1', 10));
+      const d = (state.menu.dishes||[]).find(x => x.id === dishId) || {};
+      const existing = state.cart.find(x => x.dish_id === dishId);
+      if (existing) existing.qty += q;
+      else state.cart.push({ dish_id: dishId, qty: q, name: d.name, price: Number(d.price||0) });
+      saveCart();
+      renderCart();
+      toast('Добавлено в корзину', 'ok');
+    }
+
+    function clearCart() { state.cart = []; saveCart(); renderCart(); }
+
+    function saveCart() {
+      if (!state.currentRestaurant) return;
+      LS.set('fr_cart', { restaurant_id: state.currentRestaurant, items: state.cart });
+    }
+
+    function incQty(dishId) { const it = state.cart.find(x => x.dish_id === dishId); if (it) { it.qty += 1; saveCart(); renderCart(); } }
+    function decQty(dishId) { const it = state.cart.find(x => x.dish_id === dishId); if (it) { it.qty = Math.max(1, it.qty - 1); saveCart(); renderCart(); } }
+    function removeItem(dishId) { const i = state.cart.findIndex(x => x.dish_id === dishId); if (i >= 0) { state.cart.splice(i,1); saveCart(); renderCart(); } }
+
+    function updateButtons() {
+      const bCreate = el('btn-create-order');
+      if (bCreate) bCreate.disabled = !(state.cart.length && state.currentRestaurant && !!state.access);
+      const bPay = el('btn-pay');
+      if (bPay) bPay.disabled = !state.order;
+    }
+
+    async function createOrder() {
+      if (!state.access) { toast('Нужно войти, чтобы оформить заказ', 'err'); return; }
+      if (!state.currentRestaurant) { alert('Сначала выберите ресторан и добавьте блюда.'); return; }
+      if (!state.cart.length) { alert('Корзина пуста.'); return; }
+      try {
+        setLoading('btn-create-order', true, 'Создаём...');
+        const items = state.cart.map(({dish_id, qty}) => ({ dish_id, qty }));
+        const data = await api('/orders', { method: 'POST', body: { restaurant_id: state.currentRestaurant, items } });
+        state.order = data; renderOrder();
+        if (UI_CONFIG.stripePk) {
+          el('btn-pay').classList.toggle('hidden', false);
+          setupStripe();
+        } else {
+          el('btn-pay').classList.toggle('hidden', true);
+          el('stripe-disabled').textContent = 'STRIPE_PUBLISHABLE_KEY не задан. Оплата отключена (можно протестировать заказ и WebSocket).';
+        }
+        toast('Заказ создан', 'ok');
+      } catch (e) {
+        el('order').innerHTML = `<div class="err">Ошибка создания заказа: ${JSON.stringify(e.data||e)}</div>`;
+        toast('Не удалось создать заказ', 'err');
+      } finally { setLoading('btn-create-order', false, 'Создать заказ'); updateButtons(); }
+    }
+
+    function setupStripe() {
+      const pk = UI_CONFIG.stripePk || '';
+      if (!pk) {
+        el('stripe-disabled').textContent = 'STRIPE_PUBLISHABLE_KEY не задан. Оплата отключена (можно протестировать заказ и WebSocket).';
+        return;
+      }
+      if (!state.stripe) state.stripe = Stripe(pk);
+      if (!state.card) {
+        const elements = state.stripe.elements();
+        state.card = elements.create('card');
+        state.card.mount('#stripe-card');
+      }
+      el('stripe-card').classList.toggle('hidden', false);
+    }
+
+    async function pay() {
+      if (!state.order) { alert('Сначала создайте заказ.'); return; }
+      try {
+        setLoading('btn-pay', true, 'Оплачиваем...');
+        const p = await api(`/orders/${state.order.id}/pay`, { method: 'POST' });
+        logDebug(p);
+        if (!UI_CONFIG.stripePk) { el('pay-status').innerHTML = '<span class="err">Нет publishable key — фронт не может подтвердить оплату.</span>'; return; }
+        const result = await state.stripe.confirmCardPayment(p.client_secret, { payment_method: { card: state.card } });
+        if (result.error) {
+          el('pay-status').innerHTML = `<span class="err">Ошибка оплаты: ${result.error.message}</span>`;
+          toast('Ошибка оплаты', 'err');
+        } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+          el('pay-status').innerHTML = '<span class="ok">Оплата прошла. Ожидаем событие paid по WebSocket.</span>';
+          toast('Оплата прошла', 'ok');
+        } else {
+          el('pay-status').textContent = `Статус: ${result.paymentIntent?.status || 'unknown'}`;
+        }
+      } catch (e) {
+        el('pay-status').innerHTML = `<span class="err">Ошибка: ${JSON.stringify(e.data||e)}</span>`;
+        toast('Ошибка при подтверждении оплаты', 'err');
+      } finally { setLoading('btn-pay', false, 'Оплатить'); }
+    }
+
+    function wsConnect() {
+      if (!state.order) { alert('Сначала создайте заказ.'); return; }
+      if (state.ws) { try { state.ws.close(); } catch (_) {} }
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${proto}://${location.host}/ws/track/${state.order.id}/`;
+      const ws = new WebSocket(url);
+      state.ws = ws;
+      const log = (m) => { const box = el('ws-log'); box.innerHTML += m + '\n'; box.scrollTop = box.scrollHeight; };
+      ws.onopen = () => log('[open] Подключено');
+      ws.onclose = () => log('[close] Отключено');
+      ws.onerror = (e) => log('[error] ' + JSON.stringify(e));
+      ws.onmessage = (ev) => { log('[msg] ' + ev.data); try {
+        const obj = JSON.parse(ev.data); if (obj.status) { state.order.status = obj.status; renderOrder(); }
+      } catch (_) {} };
+    }
+
+    function wsDisconnect() { if (state.ws) { state.ws.close(); state.ws = null; } }
+
+    function logout() {
+  // Сброс локального состояния и хранилища
+  LS.del('fr_access'); LS.del('fr_refresh'); LS.del('fr_email'); LS.del('fr_cart'); LS.del('fr_rest_id');
+  state.access = null; state.refresh = null; state.meEmail = null;
+  state.cart = []; state.order = null; state.orders = [];
+  // Закрыть WebSocket, если подключен
+  try { if (state.ws) { state.ws.close(); } } catch (_) {}
+  state.ws = null;
+  // Скрыть Stripe-элементы и очистить статус оплаты
+  const cardBox = el('stripe-card'); if (cardBox) cardBox.classList.add('hidden');
+  const payStatus = el('pay-status'); if (payStatus) payStatus.textContent = '';
+  const btnPay = el('btn-pay'); if (btnPay) { btnPay.classList.add('hidden'); btnPay.disabled = true; }
+  const ordersBox = el('orders-list'); if (ordersBox) ordersBox.textContent = 'Нет данных';
+  renderCart(); renderOrder(); updateUserBar();
+  setAuthStatus('Неавторизован'); toast('Вы вышли из аккаунта', 'ok'); updateButtons();
+}
+
+    // Bind
+    el('btn-register').onclick = register;
+    el('btn-login').onclick = login;
+    el('btn-find').onclick = findRestaurants;
+    el('btn-geoloc').onclick = geoloc;
+    el('btn-apply-filter').onclick = async () => {
+      if (!state.currentRestaurant) { toast('Сначала выберите ресторан', 'err'); return; }
+      setLoading('btn-apply-filter', true, 'Применяем...');
+      try { await loadMenu(state.currentRestaurant); }
+      finally { setLoading('btn-apply-filter', false); }
+    };
+    el('btn-reset-filter').onclick = () => {
+      const inp = el('exclude_allergens'); if (inp) inp.value = '';
+      LS.del('fr_ex_allergens');
+      if (state.currentRestaurant) loadMenu(state.currentRestaurant);
+    };
+    el('btn-orders').onclick = fetchOrders;
+    const ordersFilter = el('orders-filter');
+    if (ordersFilter) ordersFilter.onchange = fetchOrders;
+    el('btn-clear').onclick = clearCart;
+    el('btn-create-order').onclick = createOrder;
+    el('btn-pay').onclick = pay;
+    el('btn-ws-connect').onclick = wsConnect;
+    el('btn-ws-disconnect').onclick = wsDisconnect;
+    el('btn-logout').onclick = logout;
+
+    // Инициализация: подтянуть сессию/координаты/корзину
+    function bootstrap() {
+      const a = LS.get('fr_access'); const r = LS.get('fr_refresh'); const em = LS.get('fr_email');
+      if (a && r && em) { state.access = a; state.refresh = r; state.meEmail = em; setAuthStatus(`Вошли как ${em}`, true); updateUserBar(); }
+      const coords = LS.get('fr_coords');
+      if (coords) { el('lat').value = coords.lat || el('lat').value; el('lon').value = coords.lon || el('lon').value; el('radius').value = coords.radius || el('radius').value; }
+      const exa = LS.get('fr_ex_allergens', '');
+      if (el('exclude_allergens')) el('exclude_allergens').value = exa;
+      if (!UI_CONFIG.stripePk) { el('stripe-disabled').textContent = 'STRIPE_PUBLISHABLE_KEY не задан. Оплата отключена (можно протестировать заказ и WebSocket).'; }
+      const restSaved = LS.get('fr_rest_id', null);
+      if (restSaved) { try { loadMenu(restSaved); } catch (_) {} }
+      // Корзина подтягивается после выбора ресторана в loadMenu (по restaurant_id)
+      updateButtons();
+      findRestaurants();
+      if (state.access) { try { fetchOrders(); } catch (_) {} }
+    }
+    bootstrap();
+  </script>
+</body>
+</html>
