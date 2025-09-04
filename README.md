@@ -53,6 +53,14 @@
 - Конфигурация на основе окружения
 - Комплексное логирование
 
+**Сложные фичи:**
+- **Django + Channels** для real-time WebSocket updates
+- **PostGIS integration** для геопространственных запросов
+- **Stripe payments** с webhook handling
+- **Multi-role system** (customers/couriers/restaurants)
+- **Complex business logic**: order management, delivery tracking
+- **Performance optimization**: Redis caching, database indexing
+
 ## 🚀 Быстрый старт
 
 ### Локальная разработка (без Docker)
